@@ -75,6 +75,45 @@ export default function MoodForest(){
   const delMood=(id)=>{const up=moodEntries.filter(e=>e.id!==id);setMoodEntries(up);save("sf-moods",up);};
   const delJournal=(id)=>{const up=journals.filter(e=>e.id!==id);setJournals(up);save("sf-journals",up);};
 
+  const exportData=()=>{
+    const data={
+      exportDate:new Date().toISOString(),
+      moodEntries:moodEntries.map(e=>({
+        날짜:fmtDate(e.date),시간:fmtTime(e.date),시간대:TIME_LABELS[e.timeSlot],
+        기분점수:e.score,기분:MOODS[e.score-1]?.label,집중력:e.productivity,
+        태그:(e.tags||[]).join(", "),메모:e.memo||""
+      })),
+      journals:journals.map(e=>({
+        날짜:fmtDate(e.date),유형:e.type==="morning"?"아침 다짐":"저녁 회고",
+        되고싶은나:e.morning||"",만족한순간:e.evSatisfied||"",내일첫할일:e.tmrFirst||""
+      })),
+      _raw:{moods:moodEntries,journals}
+    };
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`still-forest-backup-${todayKey()}.json`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCSV=()=>{
+    const header="날짜,시간,시간대,유형,기분점수,기분,집중력,태그,메모,되고싶은나,만족한순간,내일첫할일\n";
+    const moodRows=moodEntries.map(e=>
+      `${fmtDate(e.date)},${fmtTime(e.date)},${TIME_LABELS[e.timeSlot]},기분체크,${e.score},${MOODS[e.score-1]?.label},${e.productivity},"${(e.tags||[]).join("/")}","${e.memo||""}",,,`
+    ).join("\n");
+    const journalRows=journals.map(e=>
+      `${fmtDate(e.date)},,${e.type==="morning"?"아침":"저녁"},다짐/회고,,,,,,${e.morning||""},"${e.evSatisfied||""}","${e.tmrFirst||""}"`
+    ).join("\n");
+    const csv="\uFEFF"+header+moodRows+"\n"+journalRows;
+    const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;a.download=`still-forest-${todayKey()}.csv`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const todayMoods=useMemo(()=>moodEntries.filter(e=>e.dateKey===todayKey()),[moodEntries]);
   const todayJournals=useMemo(()=>journals.filter(e=>e.dateKey===todayKey()),[journals]);
   const hasMorningJ=todayJournals.some(e=>e.type==="morning");
@@ -230,7 +269,15 @@ export default function MoodForest(){
 
       {view==="history"&&(
         <div style={S.card}>
-          <h2 style={S.secTitle}>전체 기록</h2>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <h2 style={{...S.secTitle,marginBottom:0}}>전체 기록</h2>
+            {(moodEntries.length>0||journals.length>0)&&(
+              <div style={{display:"flex",gap:6}}>
+                <button onClick={exportCSV} style={S.exportBtn}>📊 CSV</button>
+                <button onClick={exportData} style={S.exportBtn}>💾 백업</button>
+              </div>
+            )}
+          </div>
           {moodEntries.length===0&&journals.length===0?(
             <div style={S.empty}><span style={{fontSize:40}}>🌱</span><p>아직 기록이 없어요.<br/>첫 번째 감정을 심어보세요!</p></div>
           ):(
@@ -485,4 +532,5 @@ const S={
   insightBox:{background:"linear-gradient(135deg,rgba(46,125,50,0.08),rgba(129,199,132,0.1))",borderRadius:14,padding:14,display:"flex",gap:10,alignItems:"flex-start",border:"1px solid rgba(46,125,50,0.12)"},
   insightText:{fontSize:12,color:"#3e5e3e",lineHeight:1.7,margin:"4px 0 0"},
   footer:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"22px 0 8px",fontSize:11,color:"#8aA780"},
+  exportBtn:{padding:"6px 12px",borderRadius:10,border:"1.5px solid #c8d8c0",background:"rgba(255,255,255,0.8)",fontSize:12,fontWeight:600,color:"#2E7D32",cursor:"pointer",fontFamily:"inherit"},
 };
