@@ -116,6 +116,36 @@ export default function MoodForest(){
     URL.revokeObjectURL(url);
   };
 
+  const [importMsg,setImportMsg]=useState(null);
+
+  const importData=(e)=>{
+    const file=e.target.files[0];
+    if(!file)return;
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(data._raw&&data._raw.moods&&data._raw.journals){
+          const newMoods=[...data._raw.moods,...moodEntries];
+          const newJournals=[...data._raw.journals,...journals];
+          // Deduplicate by id
+          const uniqMoods=[...new Map(newMoods.map(e=>[e.id,e])).values()].sort((a,b)=>new Date(b.date)-new Date(a.date));
+          const uniqJournals=[...new Map(newJournals.map(e=>[e.id,e])).values()].sort((a,b)=>new Date(b.date)-new Date(a.date));
+          setMoodEntries(uniqMoods);save("sf-moods",uniqMoods);
+          setJournals(uniqJournals);save("sf-journals",uniqJournals);
+          setImportMsg(`✅ 불러오기 완료! 기분 ${data._raw.moods.length}개, 다짐/회고 ${data._raw.journals.length}개`);
+        }else{
+          setImportMsg("❌ 올바른 백업 파일이 아니에요");
+        }
+      }catch{
+        setImportMsg("❌ 파일을 읽을 수 없어요");
+      }
+      setTimeout(()=>setImportMsg(null),3000);
+    };
+    reader.readAsText(file);
+    e.target.value="";
+  };
+
   const todayMoods=useMemo(()=>moodEntries.filter(e=>e.dateKey===todayKey()),[moodEntries]);
   const todayJournals=useMemo(()=>journals.filter(e=>e.dateKey===todayKey()),[journals]);
   const hasMorningJ=todayJournals.some(e=>e.type==="morning");
@@ -273,13 +303,16 @@ export default function MoodForest(){
         <div style={S.card}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
             <h2 style={{...S.secTitle,marginBottom:0}}>기록 달력</h2>
-            {(moodEntries.length>0||journals.length>0)&&(
-              <div style={{display:"flex",gap:6}}>
-                <button onClick={exportCSV} style={S.exportBtn}>📊 CSV</button>
-                <button onClick={exportData} style={S.exportBtn}>💾 백업</button>
-              </div>
-            )}
+            <div style={{display:"flex",gap:6}}>
+              {(moodEntries.length>0||journals.length>0)&&<>
+                <button onClick={exportCSV} style={S.exportBtn}>📊 엑셀</button>
+                <button onClick={exportData} style={S.exportBtn}>💾 내보내기</button>
+              </>}
+              <button onClick={()=>document.getElementById("importFile").click()} style={S.exportBtn}>📂 불러오기</button>
+              <input id="importFile" type="file" accept=".json" onChange={importData} style={{display:"none"}}/>
+            </div>
           </div>
+          {importMsg&&<div style={{...S.savedBanner,marginBottom:12}}>{importMsg}</div>}
 
           {/* Calendar Navigation */}
           <div style={S.calNav}>
