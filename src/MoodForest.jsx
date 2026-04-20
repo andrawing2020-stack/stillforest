@@ -42,6 +42,8 @@ export default function MoodForest(){
   const [evSatisfied,setEvSatisfied]=useState("");
   const [tmrFirst,setTmrFirst]=useState("");
   const [jSaved,setJSaved]=useState(false);
+  const [calMonth,setCalMonth]=useState(()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1);});
+  const [selectedDate,setSelectedDate]=useState(todayKey());
 
   useEffect(()=>{
     setMoodEntries(load("sf-moods")||[]);
@@ -270,7 +272,7 @@ export default function MoodForest(){
       {view==="history"&&(
         <div style={S.card}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-            <h2 style={{...S.secTitle,marginBottom:0}}>전체 기록</h2>
+            <h2 style={{...S.secTitle,marginBottom:0}}>기록 달력</h2>
             {(moodEntries.length>0||journals.length>0)&&(
               <div style={{display:"flex",gap:6}}>
                 <button onClick={exportCSV} style={S.exportBtn}>📊 CSV</button>
@@ -278,53 +280,124 @@ export default function MoodForest(){
               </div>
             )}
           </div>
-          {moodEntries.length===0&&journals.length===0?(
-            <div style={S.empty}><span style={{fontSize:40}}>🌱</span><p>아직 기록이 없어요.<br/>첫 번째 감정을 심어보세요!</p></div>
-          ):(
-            <div style={S.entryList}>
-              {[...moodEntries.map(e=>({...e,_t:"mood"})),...journals.map(e=>({...e,_t:"journal"}))].sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,60).map(entry=>{
-                if(entry._t==="mood"){
-                  const mood=MOODS[entry.score-1];
-                  return(
-                    <div key={entry.id} style={{...S.entryCard,borderLeft:"3px solid "+mood.color}}>
-                      <div style={S.entryTop}>
-                        <div style={S.entryLeft}>
-                          <span style={{fontSize:24}}>{mood.emoji}</span>
-                          <div>
-                            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                              <span style={{...S.eScore,color:mood.color}}>{entry.score}점</span>
-                              <span style={S.eProd}>집중 {entry.productivity||"?"}</span>
-                              <span style={S.etime}>{fmtTime(entry.date)}</span>
+
+          {/* Calendar Navigation */}
+          <div style={S.calNav}>
+            <button onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()-1,1))} style={S.calArrow}>◀</button>
+            <span style={S.calMonthLabel}>{calMonth.getFullYear()}년 {calMonth.getMonth()+1}월</span>
+            <button onClick={()=>setCalMonth(new Date(calMonth.getFullYear(),calMonth.getMonth()+1,1))} style={S.calArrow}>▶</button>
+          </div>
+
+          {/* Calendar Grid */}
+          <div style={S.calGrid}>
+            {["월","화","수","목","금","토","일"].map(d=><div key={d} style={S.calDayHeader}>{d}</div>)}
+            {(()=>{
+              const year=calMonth.getFullYear(),month=calMonth.getMonth();
+              const firstDay=(new Date(year,month,1).getDay()+6)%7;
+              const daysInMonth=new Date(year,month+1,0).getDate();
+              const cells=[];
+              for(let i=0;i<firstDay;i++) cells.push(<div key={"e"+i} style={S.calCell}/>);
+              for(let d=1;d<=daysInMonth;d++){
+                const dk=`${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+                const dayMoods=moodEntries.filter(e=>e.dateKey===dk);
+                const dayJournals=journals.filter(e=>e.dateKey===dk);
+                const hasData=dayMoods.length>0||dayJournals.length>0;
+                const avgM=dayMoods.length?(dayMoods.reduce((a,e)=>a+e.score,0)/dayMoods.length):0;
+                const isSelected=dk===selectedDate;
+                const isToday=dk===todayKey();
+                cells.push(
+                  <button key={dk} onClick={()=>setSelectedDate(dk)} style={{
+                    ...S.calCell,...S.calCellBtn,
+                    ...(isSelected?S.calCellSelected:{}),
+                    ...(isToday&&!isSelected?S.calCellToday:{}),
+                    opacity:isSelected?1:hasData?1:0.4,
+                  }}>
+                    <span style={{fontSize:13,fontWeight:isToday||isSelected?700:500}}>{d}</span>
+                    {hasData&&(
+                      <div style={{display:"flex",gap:2,justifyContent:"center",marginTop:2}}>
+                        {dayMoods.length>0&&<div style={{...S.calDot,background:avgM>=7?"#2E7D32":avgM>=4?"#66BB6A":"#AED581"}}/>}
+                        {dayJournals.some(e=>e.type==="morning")&&<div style={{...S.calDot,background:"#FFB74D"}}/>}
+                        {dayJournals.some(e=>e.type==="evening")&&<div style={{...S.calDot,background:"#7E57C2"}}/>}
+                      </div>
+                    )}
+                  </button>
+                );
+              }
+              return cells;
+            })()}
+          </div>
+
+          {/* Legend */}
+          <div style={S.calLegend}>
+            <span style={S.calLegItem}><span style={{...S.calDot,background:"#2E7D32"}}/>기분</span>
+            <span style={S.calLegItem}><span style={{...S.calDot,background:"#FFB74D"}}/>아침</span>
+            <span style={S.calLegItem}><span style={{...S.calDot,background:"#7E57C2"}}/>저녁</span>
+          </div>
+
+          {/* Selected Day Detail */}
+          {(()=>{
+            const dayMoods=moodEntries.filter(e=>e.dateKey===selectedDate);
+            const dayJournals=journals.filter(e=>e.dateKey===selectedDate);
+            if(dayMoods.length===0&&dayJournals.length===0) return(
+              <div style={S.dayEmpty}>{fmtDate(selectedDate+"T00:00")} — 기록이 없는 날이에요 🍃</div>
+            );
+            return(
+              <div style={S.dayDetail}>
+                <div style={S.dayDetailTitle}>{fmtDate(selectedDate+"T00:00")} 기록</div>
+
+                {dayMoods.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={S.daySubTitle}>🎯 기분 체크 ({dayMoods.length}회)</div>
+                    {dayMoods.sort((a,b)=>new Date(a.date)-new Date(b.date)).map(entry=>{
+                      const mood=MOODS[entry.score-1];
+                      return(
+                        <div key={entry.id} style={{...S.entryCard,borderLeft:"3px solid "+mood.color,marginBottom:8}}>
+                          <div style={S.entryTop}>
+                            <div style={S.entryLeft}>
+                              <span style={{fontSize:22}}>{mood.emoji}</span>
+                              <div>
+                                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                  <span style={{...S.eScore,color:mood.color}}>{entry.score}점</span>
+                                  <span style={S.eProd}>집중 {entry.productivity||"?"}</span>
+                                  <span style={S.etime}>{fmtTime(entry.date)}</span>
+                                </div>
+                              </div>
                             </div>
-                            <span style={S.eDate}>{fmtDate(entry.date)} · {TIME_LABELS[entry.timeSlot]}</span>
+                            <button onClick={()=>delMood(entry.id)} style={S.delBtn}>×</button>
                           </div>
+                          {entry.tags?.length>0&&<div style={S.eTags}>{entry.tags.map(t=><span key={t} style={S.eTag}>{t}</span>)}</div>}
+                          {entry.memo&&<p style={S.eMemo}>"{entry.memo}"</p>}
                         </div>
-                        <button onClick={()=>delMood(entry.id)} style={S.delBtn}>×</button>
-                      </div>
-                      {entry.tags?.length>0&&<div style={S.eTags}>{entry.tags.map(t=><span key={t} style={S.eTag}>{t}</span>)}</div>}
-                      {entry.memo&&<p style={S.eMemo}>"{entry.memo}"</p>}
-                    </div>
-                  );
-                }else{
-                  const isM=entry.type==="morning";
-                  return(
-                    <div key={entry.id} style={{...S.entryCard,borderLeft:`3px solid ${isM?"#66BB6A":"#1B5E20"}`,background:isM?"rgba(232,245,233,0.4)":"rgba(200,230,201,0.3)"}}>
-                      <div style={S.entryTop}>
-                        <div style={S.entryLeft}>
-                          <span style={{fontSize:24}}>{isM?"🌅":"🌙"}</span>
-                          <div><span style={{fontSize:14,fontWeight:700,color:isM?"#43A047":"#1B5E20"}}>{isM?"아침 다짐":"저녁 회고"}</span><span style={S.eDate}>{fmtDate(entry.date)}</span></div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {dayJournals.length>0&&(
+                  <div>
+                    <div style={S.daySubTitle}>📝 다짐 / 회고</div>
+                    {dayJournals.map(entry=>{
+                      const isM=entry.type==="morning";
+                      return(
+                        <div key={entry.id} style={{...S.entryCard,borderLeft:`3px solid ${isM?"#66BB6A":"#1B5E20"}`,background:isM?"rgba(232,245,233,0.4)":"rgba(200,230,201,0.3)",marginBottom:8}}>
+                          <div style={S.entryTop}>
+                            <div style={S.entryLeft}>
+                              <span style={{fontSize:22}}>{isM?"🌅":"🌙"}</span>
+                              <span style={{fontSize:13,fontWeight:700,color:isM?"#43A047":"#1B5E20"}}>{isM?"아침 다짐":"저녁 회고"}</span>
+                            </div>
+                            <button onClick={()=>delJournal(entry.id)} style={S.delBtn}>×</button>
+                          </div>
+                          {entry.morning&&<div style={S.jEntry}><span style={S.jELbl}>🌅 되고 싶은 나</span><p style={S.jETxt}>{entry.morning}</p></div>}
+                          {entry.evSatisfied&&<div style={S.jEntry}><span style={S.jELbl}>✨ 만족한 순간</span><p style={S.jETxt}>{entry.evSatisfied}</p></div>}
+                          {entry.tmrFirst&&<div style={S.jEntry}><span style={S.jELbl}>🌱 내일 첫 할 일</span><p style={S.jETxt}>{entry.tmrFirst}</p></div>}
                         </div>
-                        <button onClick={()=>delJournal(entry.id)} style={S.delBtn}>×</button>
-                      </div>
-                      {entry.morning&&<div style={S.jEntry}><span style={S.jELbl}>🌅 되고 싶은 나</span><p style={S.jETxt}>{entry.morning}</p></div>}
-                      {entry.evSatisfied&&<div style={S.jEntry}><span style={S.jELbl}>✨ 만족한 순간</span><p style={S.jETxt}>{entry.evSatisfied}</p></div>}
-                      {entry.tmrFirst&&<div style={S.jEntry}><span style={S.jELbl}>🌱 내일 첫 할 일</span><p style={S.jETxt}>{entry.tmrFirst}</p></div>}
-                    </div>
-                  );
-                }
-              })}
-            </div>
-          )}
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -533,4 +606,20 @@ const S={
   insightText:{fontSize:12,color:"#3e5e3e",lineHeight:1.7,margin:"4px 0 0"},
   footer:{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"22px 0 8px",fontSize:11,color:"#8aA780"},
   exportBtn:{padding:"6px 12px",borderRadius:10,border:"1.5px solid #c8d8c0",background:"rgba(255,255,255,0.8)",fontSize:12,fontWeight:600,color:"#2E7D32",cursor:"pointer",fontFamily:"inherit"},
+  calNav:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},
+  calArrow:{background:"none",border:"1.5px solid #c8d8c0",borderRadius:10,width:36,height:36,cursor:"pointer",fontSize:14,color:"#2E7D32",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"},
+  calMonthLabel:{fontSize:16,fontWeight:700,color:"#1B5E20"},
+  calGrid:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:10},
+  calDayHeader:{textAlign:"center",fontSize:11,fontWeight:700,color:"#8aA780",padding:"4px 0"},
+  calCell:{textAlign:"center",padding:4,minHeight:44},
+  calCellBtn:{background:"rgba(255,255,255,0.5)",borderRadius:10,border:"1.5px solid transparent",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"inherit"},
+  calCellSelected:{background:"#2E7D32",color:"#fff",borderColor:"#2E7D32"},
+  calCellToday:{borderColor:"#66BB6A",background:"rgba(102,187,106,0.15)"},
+  calDot:{width:6,height:6,borderRadius:"50%",display:"inline-block"},
+  calLegend:{display:"flex",justifyContent:"center",gap:14,marginBottom:16},
+  calLegItem:{display:"flex",alignItems:"center",gap:4,fontSize:11,color:"#6a8760"},
+  dayEmpty:{textAlign:"center",padding:"24px 0",color:"#aaa",fontSize:13},
+  dayDetail:{marginTop:4},
+  dayDetailTitle:{fontSize:15,fontWeight:700,color:"#1B5E20",marginBottom:12},
+  daySubTitle:{fontSize:13,fontWeight:700,color:"#2E7D32",marginBottom:8},
 };
