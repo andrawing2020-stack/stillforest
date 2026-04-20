@@ -575,7 +575,7 @@ const S={
   moodDisplay:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,marginBottom:14},
   moodScore:{fontSize:32,fontWeight:800},
   moodLbl:{fontSize:14,fontWeight:600},
-  scoreRow:{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"},
+  scoreRow:{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,justifyItems:"center",maxWidth:240,margin:"0 auto"},
   scoreBtn:{width:36,height:36,borderRadius:"50%",border:"2px solid rgba(46,125,50,0.2)",cursor:"pointer",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"},
   prodRow:{display:"flex",alignItems:"center",gap:10},
   pLabel:{fontSize:12,color:"#999"},
