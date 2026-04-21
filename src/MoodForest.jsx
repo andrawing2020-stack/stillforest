@@ -70,7 +70,14 @@ export default function MoodForest(){
     const entry={id:Date.now(),date:now.toISOString(),dateKey:todayKey(),type:jMode,morning:jMode==="morning"?morningText:null,evSatisfied:jMode==="evening"?evSatisfied:null,tmrFirst:jMode==="evening"?tmrFirst:null};
     const up=[entry,...journals];
     setJournals(up);save("sf-journals",up);
-    if(jMode==="morning")setMorningText("");else{setEvSatisfied("");setTmrFirst("");}
+    if(jMode==="morning")setMorningText("");else{
+      setEvSatisfied("");setTmrFirst("");
+      // 저녁 회고 완료 → 달력을 내일로, 모드를 아침으로
+      const tmr=new Date();tmr.setDate(tmr.getDate()+1);
+      const tmrKey=tmr.toISOString().slice(0,10);
+      setSelectedDate(tmrKey);
+      setJMode("morning");
+    }
     setJSaved(true);setTimeout(()=>setJSaved(false),2000);
   };
 
