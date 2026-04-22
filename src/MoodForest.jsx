@@ -20,8 +20,20 @@ function getTimeSlot(h){return h<6?0:h<12?1:h<18?2:3;}
 function fmtTime(d){const dt=new Date(d);return `${dt.getHours()}:${String(dt.getMinutes()).padStart(2,'0')}`;}
 function fmtDate(ds){const d=new Date(ds),wd=["일","월","화","수","목","금","토"];return `${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})`;}
 function getWeekday(ds){return ["일","월","화","수","목","금","토"][new Date(ds).getDay()];}
-function todayKey(){return new Date().toISOString().slice(0,10);}
+function systemToday(){return new Date().toISOString().slice(0,10);}
+function tomorrowKey(){const t=new Date();t.setDate(t.getDate()+1);return t.toISOString().slice(0,10);}
 function timeGreeting(){const h=new Date().getHours();if(h<6)return"늦은 밤이네요 🌙";if(h<12)return"좋은 아침이에요 🌅";if(h<18)return"오후를 보내고 있군요 🌤️";return"하루를 마무리하는 시간이에요 🌙";}
+
+function getEffectiveDate(){
+  const actual=systemToday();
+  const saved=localStorage.getItem("sf-effective-date");
+  // 저장된 유효날짜가 있고, 실제 날짜보다 미래면 그걸 사용
+  if(saved&&saved>actual)return saved;
+  // 아니면 실제 날짜 사용 (날짜가 따라잡음)
+  localStorage.removeItem("sf-effective-date");
+  return actual;
+}
+function setEffectiveDate(dateKey){localStorage.setItem("sf-effective-date",dateKey);}
 
 function load(key){try{const v=localStorage.getItem(key);return v?JSON.parse(v):null;}catch{return null;}}
 function save(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
@@ -43,22 +55,25 @@ export default function MoodForest(){
   const [tmrFirst,setTmrFirst]=useState("");
   const [jSaved,setJSaved]=useState(false);
   const [calMonth,setCalMonth]=useState(()=>{const n=new Date();return new Date(n.getFullYear(),n.getMonth(),1);});
-  const [selectedDate,setSelectedDate]=useState(todayKey());
+  const [selectedDate,setSelectedDate]=useState(()=>getEffectiveDate());
+  const [curDay,setCurDay]=useState(()=>getEffectiveDate());
 
   useEffect(()=>{
+    const ed=getEffectiveDate();
+    setCurDay(ed);setSelectedDate(ed);
     setMoodEntries(load("sf-moods")||[]);
     setJournals(load("sf-journals")||[]);
-    const draft=load("sf-draft-"+todayKey());
+    const draft=load("sf-draft-"+ed);
     if(draft){draft.morning&&setMorningText(draft.morning);draft.evSatisfied&&setEvSatisfied(draft.evSatisfied);draft.tmrFirst&&setTmrFirst(draft.tmrFirst);}
     setJMode(new Date().getHours()<15?"morning":"evening");
     setLoading(false);
   },[]);
 
-  useEffect(()=>{if(!loading)save("sf-draft-"+todayKey(),{morning:morningText,evSatisfied,tmrFirst});},[morningText,evSatisfied,tmrFirst,loading]);
+  useEffect(()=>{if(!loading)save("sf-draft-"+curDay,{morning:morningText,evSatisfied,tmrFirst});},[morningText,evSatisfied,tmrFirst,loading,curDay]);
 
   const saveMood=()=>{
     const now=new Date();
-    const entry={id:Date.now(),date:now.toISOString(),dateKey:todayKey(),hour:now.getHours(),minute:now.getMinutes(),timeSlot:getTimeSlot(now.getHours()),score,productivity,tags,memo};
+    const entry={id:Date.now(),date:now.toISOString(),dateKey:curDay,hour:now.getHours(),minute:now.getMinutes(),timeSlot:getTimeSlot(now.getHours()),score,productivity,tags,memo};
     const up=[entry,...moodEntries];
     setMoodEntries(up);save("sf-moods",up);
     setScore(5);setTags([]);setProd(5);setMemo("");
@@ -67,15 +82,16 @@ export default function MoodForest(){
 
   const saveJournal=()=>{
     const now=new Date();
-    const entry={id:Date.now(),date:now.toISOString(),dateKey:todayKey(),type:jMode,morning:jMode==="morning"?morningText:null,evSatisfied:jMode==="evening"?evSatisfied:null,tmrFirst:jMode==="evening"?tmrFirst:null};
+    const entry={id:Date.now(),date:now.toISOString(),dateKey:curDay,type:jMode,morning:jMode==="morning"?morningText:null,evSatisfied:jMode==="evening"?evSatisfied:null,tmrFirst:jMode==="evening"?tmrFirst:null};
     const up=[entry,...journals];
     setJournals(up);save("sf-journals",up);
     if(jMode==="morning")setMorningText("");else{
       setEvSatisfied("");setTmrFirst("");
-      // 저녁 회고 완료 → 달력을 내일로, 모드를 아침으로
-      const tmr=new Date();tmr.setDate(tmr.getDate()+1);
-      const tmrKey=tmr.toISOString().slice(0,10);
-      setSelectedDate(tmrKey);
+      // 저녁 회고 완료 → 유효 날짜를 내일로 전환
+      const nextDay=tomorrowKey();
+      setEffectiveDate(nextDay);
+      setCurDay(nextDay);
+      setSelectedDate(nextDay);
       setJMode("morning");
     }
     setJSaved(true);setTimeout(()=>setJSaved(false),2000);
@@ -101,7 +117,7 @@ export default function MoodForest(){
     const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    a.href=url;a.download=`still-forest-backup-${todayKey()}.json`;
+    a.href=url;a.download=`still-forest-backup-${systemToday()}.json`;
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -118,7 +134,7 @@ export default function MoodForest(){
     const blob=new Blob([csv],{type:"text/csv;charset=utf-8"});
     const url=URL.createObjectURL(blob);
     const a=document.createElement("a");
-    a.href=url;a.download=`still-forest-${todayKey()}.csv`;
+    a.href=url;a.download=`still-forest-${systemToday()}.csv`;
     document.body.appendChild(a);a.click();document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
@@ -153,15 +169,15 @@ export default function MoodForest(){
     e.target.value="";
   };
 
-  const todayMoods=useMemo(()=>moodEntries.filter(e=>e.dateKey===todayKey()),[moodEntries]);
-  const todayJournals=useMemo(()=>journals.filter(e=>e.dateKey===todayKey()),[journals]);
+  const todayMoods=useMemo(()=>moodEntries.filter(e=>e.dateKey===curDay),[moodEntries,curDay]);
+  const todayJournals=useMemo(()=>journals.filter(e=>e.dateKey===curDay),[journals,curDay]);
   const hasMorningJ=todayJournals.some(e=>e.type==="morning");
   const hasEveningJ=todayJournals.some(e=>e.type==="evening");
 
   const yesterdayTask=useMemo(()=>{
-    const y=new Date();y.setDate(y.getDate()-1);
+    const y=new Date(curDay+"T00:00:00");y.setDate(y.getDate()-1);
     return journals.find(e=>e.dateKey===y.toISOString().slice(0,10)&&e.tmrFirst)?.tmrFirst||null;
-  },[journals]);
+  },[journals,curDay]);
 
   const timePattern=useMemo(()=>{
     const s=[0,1,2,3].map(i=>({name:TIME_LABELS[i],avgMood:0,avgProd:0,count:0,mT:0,pT:0}));
@@ -344,7 +360,7 @@ export default function MoodForest(){
                 const hasData=dayMoods.length>0||dayJournals.length>0;
                 const avgM=dayMoods.length?(dayMoods.reduce((a,e)=>a+e.score,0)/dayMoods.length):0;
                 const isSelected=dk===selectedDate;
-                const isToday=dk===todayKey();
+                const isToday=dk===systemToday();
                 cells.push(
                   <button key={dk} onClick={()=>setSelectedDate(dk)} style={{
                     ...S.calCell,...S.calCellBtn,
