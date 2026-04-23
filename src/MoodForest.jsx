@@ -20,8 +20,9 @@ function getTimeSlot(h){return h<6?0:h<12?1:h<18?2:3;}
 function fmtTime(d){const dt=new Date(d);return `${dt.getHours()}:${String(dt.getMinutes()).padStart(2,'0')}`;}
 function fmtDate(ds){const d=new Date(ds),wd=["일","월","화","수","목","금","토"];return `${d.getMonth()+1}/${d.getDate()}(${wd[d.getDay()]})`;}
 function getWeekday(ds){return ["일","월","화","수","목","금","토"][new Date(ds).getDay()];}
-function systemToday(){return new Date().toISOString().slice(0,10);}
-function tomorrowKey(){const t=new Date();t.setDate(t.getDate()+1);return t.toISOString().slice(0,10);}
+function localDateStr(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+function systemToday(){return localDateStr(new Date());}
+function tomorrowKey(){const t=new Date();t.setDate(t.getDate()+1);return localDateStr(t);}
 function timeGreeting(){const h=new Date().getHours();if(h<6)return"늦은 밤이네요 🌙";if(h<12)return"좋은 아침이에요 🌅";if(h<18)return"오후를 보내고 있군요 🌤️";return"하루를 마무리하는 시간이에요 🌙";}
 
 function getEffectiveDate(){
@@ -175,8 +176,10 @@ export default function MoodForest(){
   const hasEveningJ=todayJournals.some(e=>e.type==="evening");
 
   const yesterdayTask=useMemo(()=>{
-    const y=new Date(curDay+"T00:00:00");y.setDate(y.getDate()-1);
-    return journals.find(e=>e.dateKey===y.toISOString().slice(0,10)&&e.tmrFirst)?.tmrFirst||null;
+    const y=new Date(curDay+"T12:00:00");
+    y.setDate(y.getDate()-1);
+    const yk=`${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+    return journals.find(e=>e.dateKey===yk&&e.tmrFirst)?.tmrFirst||null;
   },[journals,curDay]);
 
   const timePattern=useMemo(()=>{
@@ -190,7 +193,7 @@ export default function MoodForest(){
     const d=["월","화","수","목","금","토","일"].map(n=>({name:n,avgMood:0,count:0,total:0}));
     const dm={"월":0,"화":1,"수":2,"목":3,"금":4,"토":5,"일":6};
     const byDate={};
-    moodEntries.forEach(e=>{const k=e.date.slice(0,10);if(!byDate[k])byDate[k]=[];byDate[k].push(e.score);});
+    moodEntries.forEach(e=>{const k=e.dateKey;if(!byDate[k])byDate[k]=[];byDate[k].push(e.score);});
     Object.entries(byDate).forEach(([date,scores])=>{
       const dayAvg=scores.reduce((a,b)=>a+b,0)/scores.length;
       const w=getWeekday(date),i=dm[w];
@@ -202,7 +205,7 @@ export default function MoodForest(){
 
   const recentTrend=useMemo(()=>{
     const bd={};
-    moodEntries.slice(0,80).forEach(e=>{const k=e.date.slice(0,10);if(!bd[k])bd[k]={s:[],p:[]};bd[k].s.push(e.score);bd[k].p.push(e.productivity||5);});
+    moodEntries.slice(0,80).forEach(e=>{const k=e.dateKey;if(!bd[k])bd[k]={s:[],p:[]};bd[k].s.push(e.score);bd[k].p.push(e.productivity||5);});
     return Object.entries(bd).map(([d,v])=>({date:fmtDate(d),mood:+(v.s.reduce((a,b)=>a+b,0)/v.s.length).toFixed(1),prod:+(v.p.reduce((a,b)=>a+b,0)/v.p.length).toFixed(1)})).reverse();
   },[moodEntries]);
 
